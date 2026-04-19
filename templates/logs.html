@@ -1,0 +1,165 @@
+{% extends "layout.html" %}
+{% block title %}Event Logs{% endblock %}
+{% block page_title %}EVENT LOGS{% endblock %}
+
+{% block head %}
+<style>
+  .filter-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 7px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,194,255,0.08);
+  }
+  .log-table { width:100%; border-collapse:collapse; }
+  .log-table th {
+    text-align:left; padding:10px 16px;
+    font-family:var(--font-mono); font-size:10px;
+    letter-spacing:2px; color:var(--muted);
+    text-transform:uppercase;
+    border-bottom:1px solid var(--border);
+    cursor: pointer;
+  }
+  .log-table th:hover { color:var(--accent); }
+  .log-table td {
+    padding:11px 16px;
+    font-family:var(--font-mono); font-size:12px;
+    color:var(--text);
+    border-bottom:1px solid rgba(30,45,69,0.4);
+  }
+  .log-table tr:hover td { background:rgba(0,194,255,0.03); }
+  .s-SAFE      { color:#00e676; font-weight:700; }
+  .s-YAWNING   { color:#00bfff; font-weight:700; }
+  .s-DROWSY    { color:#ffab00; font-weight:700; }
+  .s-HIGH\ RISK{ color:#ff8800; font-weight:700; }
+  .s-CRITICAL  { color:#ff3d3d; font-weight:700; }
+  .s-NO\ DRIVER{ color:#4a6080; }
+  .ear-bar-wrap { background:rgba(0,0,0,0.3); border-radius:4px; height:6px; width:80px; display:inline-block; vertical-align:middle; margin-left:6px; }
+  .ear-bar      { height:100%; border-radius:4px; background:var(--accent); }
+  .no-logs      { text-align:center; padding:48px; color:var(--muted); font-family:var(--font-mono); }
+  .search-input {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    width: 200px;
+    margin-left: auto;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .page-info { font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-top:14px; text-align:right; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterTable('ALL', this)">ALL</button>
+    <button class="filter-btn" onclick="filterTable('SAFE', this)">SAFE</button>
+    <button class="filter-btn" onclick="filterTable('YAWNING', this)">YAWNING</button>
+    <button class="filter-btn" onclick="filterTable('DROWSY', this)">DROWSY</button>
+    <button class="filter-btn" onclick="filterTable('HIGH RISK', this)">HIGH RISK</button>
+    <button class="filter-btn" onclick="filterTable('CRITICAL', this)">CRITICAL</button>
+    <button class="filter-btn" onclick="filterTable('NO DRIVER', this)">NO DRIVER</button>
+    <input class="search-input" type="text" placeholder="Search..." oninput="searchTable(this.value)"/>
+  </div>
+
+  {% if logs %}
+  <table class="log-table" id="logTable">
+    <thead>
+      <tr>
+        <th onclick="sortTable(0)">#</th>
+        <th onclick="sortTable(1)">Timestamp</th>
+        <th onclick="sortTable(2)">Status</th>
+        <th onclick="sortTable(3)">EAR</th>
+        <th onclick="sortTable(4)">MAR</th>
+        <th onclick="sortTable(5)">Safety Score</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr data-status="{{ log.status }}">
+        <td style="color:var(--muted)">{{ log.id }}</td>
+        <td>{{ log.timestamp }}</td>
+        <td class="s-{{ log.status }}">{{ log.status }}</td>
+        <td>
+          {{ "%.3f"|format(log.ear) if log.ear else "—" }}
+          {% if log.ear %}
+          <span class="ear-bar-wrap"><span class="ear-bar" style="width:{{ [log.ear * 200, 100] | min }}%"></span></span>
+          {% endif %}
+        </td>
+        <td>{{ "%.3f"|format(log.mar) if log.mar else "—" }}</td>
+        <td>
+          <span style="color:{% if log.score >= 90 %}#00e676{% elif log.score >= 70 %}#ffab00{% else %}#ff3d3d{% endif %}">
+            {{ "%.1f"|format(log.score) }}%
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="page-info" id="pageInfo">Showing {{ logs | length }} entries</div>
+  {% else %}
+  <div class="no-logs">
+    No logs yet — start the drowsiness detector to begin recording events.
+  </div>
+  {% endif %}
+</div>
+
+<script>
+let activeFilter = 'ALL';
+
+function filterTable(status, btn) {
+  activeFilter = status;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function searchTable(val) {
+  applyFilters(val.toLowerCase());
+}
+
+function applyFilters(search = '') {
+  const rows = document.querySelectorAll('#logTable tbody tr');
+  let visible = 0;
+  rows.forEach(r => {
+    const statusMatch = activeFilter === 'ALL' || r.dataset.status === activeFilter;
+    const searchMatch = !search || r.textContent.toLowerCase().includes(search);
+    r.style.display = (statusMatch && searchMatch) ? '' : 'none';
+    if (statusMatch && searchMatch) visible++;
+  });
+  document.getElementById('pageInfo').textContent = `Showing ${visible} entries`;
+}
+
+function sortTable(col) {
+  const tb = document.querySelector('#logTable tbody');
+  const rows = Array.from(tb.querySelectorAll('tr'));
+  rows.sort((a, b) => {
+    const av = a.cells[col].textContent.trim();
+    const bv = b.cells[col].textContent.trim();
+    return isNaN(av) ? av.localeCompare(bv) : parseFloat(av) - parseFloat(bv);
+  });
+  rows.forEach(r => tb.appendChild(r));
+}
+</script>
+{% endblock %}

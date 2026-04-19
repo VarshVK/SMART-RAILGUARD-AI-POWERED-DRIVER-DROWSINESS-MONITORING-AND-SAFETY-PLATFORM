@@ -1,0 +1,211 @@
+{% extends "layout.html" %}
+{% block title %}Analytics{% endblock %}
+{% block page_title %}ANALYTICS{% endblock %}
+
+{% block head %}
+<style>
+  .donut-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- COUNT CARDS -->
+<div style="display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:24px;">
+  {% set items = [
+    ('SAFE',     counts.SAFE,      '#00e676'),
+    ('YAWNING',  counts.YAWNING,   '#00bfff'),
+    ('DROWSY',   counts.DROWSY,    '#ffab00'),
+    ('HIGH RISK',counts['HIGH RISK'], '#ff8800'),
+    ('CRITICAL', counts.CRITICAL,  '#ff3d3d'),
+    ('NO DRIVER',counts['NO DRIVER'], '#4a6080'),
+  ] %}
+
+  {% for label, val, color in items %}
+  <div class="chart-card" style="border-top: 3px solid {{ color }}; text-align:center; padding:16px;">
+    <div style="font-size:30px; font-weight:700; color:{{ color }};">{{ val }}</div>
+    <div style="font-size:10px; letter-spacing:2px; color:var(--muted); margin-top:4px;">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+
+
+<div class="donut-grid">
+
+  <!-- TREND -->
+  <div class="chart-card">
+    <div class="chart-title">Drowsiness Trend (last 30 entries)</div>
+    <canvas id="trendChart"></canvas>
+  </div>
+
+  <!-- DONUT -->
+  <div class="chart-card">
+    <div class="chart-title">Status Distribution</div>
+    <canvas id="donutChart"></canvas>
+
+    <div class="legend">
+      {% for label, val, color in items %}
+      <div class="legend-item">
+        <div class="legend-dot" style="background:{{ color }}"></div>
+        {{ label }} ({{ val }})
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+<div class="chart-card" style="margin-top:20px;">
+  <div class="chart-title">Confusion Matrix</div>
+
+  <table style="width:100%; text-align:center;">
+    <tr>
+      <th></th>
+      <th>Pred SAFE</th>
+      <th>Pred DROWSY</th>
+    </tr>
+    <tr>
+      <th>Actual SAFE</th>
+      <td id="tn"></td>
+      <td id="fp"></td>
+    </tr>
+    <tr>
+      <th>Actual DROWSY</th>
+      <td id="fn"></td>
+      <td id="tp"></td>
+    </tr>
+  </table>
+</div>
+
+<div class="chart-card">
+  <div class="chart-title">Performance Metrics</div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
+    <div>Accuracy: <span id="accuracy"></span></div>
+    <div>Precision: <span id="precision"></span></div>
+    <div>Recall: <span id="recall"></span></div>
+    <div>F1: <span id="f1"></span></div>
+  </div>
+</div>
+
+<script>
+const timestamps = {{ timestamps | tojson }};
+const values = {{ values | tojson }};
+
+// ================= TREND =================
+new Chart(document.getElementById('trendChart'), {
+  type: 'line',
+  data: {
+    labels: timestamps.map(t => t.slice(-8)),
+    datasets: [{
+      data: values,
+      borderColor: '#00c2ff',
+      backgroundColor: 'rgba(0,194,255,0.1)',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointBackgroundColor: values.map(v => v ? '#ff3d3d' : '#00e676'),
+      fill: true,
+      tension: 0.3,
+      stepped: true
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: {
+        min: 0,
+        max: 1,
+        ticks: {
+          stepSize: 1,
+          callback: v => v ? 'ALERT' : 'SAFE'
+        }
+      }
+    }
+  }
+});
+
+// ================= DONUT (FIXED) =================
+const counts = {{ counts | tojson }};
+
+// 🔥 FIXED ORDER (IMPORTANT)
+const labels = ["SAFE", "YAWNING", "DROWSY", "HIGH RISK", "CRITICAL", "NO DRIVER"];
+
+const data = labels.map(label => counts[label] || 0);
+
+new Chart(document.getElementById('donutChart'), {
+  type: 'doughnut',
+  data: {
+    labels: labels,
+    datasets: [{
+      data: data,
+      backgroundColor: [
+        '#00e676', // SAFE
+        '#00bfff', // YAWNING
+        '#ffab00', // DROWSY
+        '#ff8800', // HIGH RISK
+        '#ff3d3d', // CRITICAL
+        '#4a6080'  // NO DRIVER
+      ],
+      borderWidth: 3
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    cutout: '65%'
+  }
+});
+
+fetch("/metrics")
+  .then(res => res.json())
+  .then(data => {
+
+    document.getElementById("tp").innerText = data.TP;
+    document.getElementById("tn").innerText = data.TN;
+    document.getElementById("fp").innerText = data.FP;
+    document.getElementById("fn").innerText = data.FN;
+
+    document.getElementById("accuracy").innerText  = data.accuracy;
+    document.getElementById("precision").innerText = data.precision;
+    document.getElementById("recall").innerText    = data.recall;
+    document.getElementById("f1").innerText        = data.f1;
+  });
+
+</script>
+
+{% endblock %}

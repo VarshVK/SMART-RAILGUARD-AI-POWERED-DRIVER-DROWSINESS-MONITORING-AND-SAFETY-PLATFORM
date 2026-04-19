@@ -1,0 +1,164 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}DASHBOARD{% endblock %}
+
+{% block head %}
+<style>
+/* -------- CARDS -------- */
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  position: relative;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: bold;
+}
+
+/* -------- STATUS -------- */
+.status-hero {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 30px;
+  text-align: center;
+}
+
+.safe { color: #00e676; }
+.warn { color: orange; }
+.danger { color: red; }
+
+table {
+  width: 100%;
+}
+td, th {
+  padding: 10px;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+let earChart;
+
+window.onload = function() {
+    const ctx = document.getElementById('earChart').getContext('2d');
+
+    earChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'EAR',
+                data: [],
+                borderColor: 'cyan',
+                fill: true
+            }]
+        },
+        options: {
+            animation: false
+        }
+    });
+
+    setInterval(fetchData, 1500);
+};
+
+async function fetchData() {
+    try {
+        const res = await fetch('/api/latest');
+        const data = await res.json();
+
+        document.getElementById("status").innerText = data.status;
+        document.getElementById("score").innerText = data.score.toFixed(1) + "%";
+        document.getElementById("ear").innerText = data.ear.toFixed(3);
+
+        // chart
+        earChart.data.labels.push("");
+        earChart.data.datasets[0].data.push(data.ear);
+
+        if (earChart.data.labels.length > 30) {
+            earChart.data.labels.shift();
+            earChart.data.datasets[0].data.shift();
+        }
+
+        earChart.update();
+
+    } catch(e) {
+        console.log("Error fetching data");
+    }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+
+<div class="grid-4">
+    <div class="stat-card">
+        <div class="stat-label">Safety Score</div>
+        <div class="stat-value" id="score">{{ latest_score }}%</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Alerts</div>
+        <div class="stat-value">{{ total_alerts }}</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">EAR</div>
+        <div class="stat-value" id="ear">0.0</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Status</div>
+        <div class="stat-value" id="status">{{ latest_status }}</div>
+    </div>
+</div>
+
+<br>
+
+<div class="status-hero">
+    <h2>Driver Status</h2>
+    <h1 id="status">{{ latest_status }}</h1>
+</div>
+
+<br>
+
+<div class="card">
+    <h3>Recent Logs</h3>
+    <table>
+        <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>EAR</th>
+            <th>Score</th>
+        </tr>
+
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.timestamp }}</td>
+            <td>{{ log.status }}</td>
+            <td>{{ log.ear }}</td>
+            <td>{{ log.score }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<br>
+
+<div class="card">
+    <h3>Live EAR Chart</h3>
+    <canvas id="earChart"></canvas>
+</div>
+
+{% endblock %}
