@@ -1,0 +1,2 @@
+# SMART-RAILGUARD-AI-POWERED-DRIVER-DROWSINESS-MONITORING-AND-SAFETY-PLATFORM
+RailGuard AI is a driver drowsiness detection system designed to improve railway safety by monitoring driver in real time. Using OpenCV and MediaPipe Face Mesh, it track eye movements and head tilt to detect fatigue through Eye Aspect Ratio-EAR. This triggers alarms and voice alerts, logs data in a Flask–SQLite dashboard, provides safety analytics.
